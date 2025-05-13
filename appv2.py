@@ -18,7 +18,6 @@ import re
 import time
 import json
 from datetime import datetime
-import cv2
 import numpy as np
 
 # Load the environment variables
@@ -89,33 +88,6 @@ def save_docs(docs):
     
     return file_paths
 
-# Function to preprocess images
-def preprocess_image(image_path, brightness=0, contrast=1, grayscale=False):
-    img = cv2.imread(image_path)
-    if img is None:
-        st.error(f"Could not read image for preprocessing: {image_path}. Using original.")
-        return image_path # Return original path if error
-    
-    # Apply brightness and contrast adjustments
-    img_processed = cv2.convertScaleAbs(img, alpha=contrast, beta=brightness)
-    
-    # Convert to grayscale if selected
-    if grayscale:
-        img_processed = cv2.cvtColor(img_processed, cv2.COLOR_BGR2GRAY)
-        # If Gemini needs 3 channels, convert back. For saving, grayscale is fine.
-        # img_processed = cv2.cvtColor(img_processed, cv2.COLOR_GRAY2BGR) 
-    
-    # Save the processed image with a prefix
-    processed_filename = "processed_" + os.path.basename(image_path)
-    processed_path = os.path.join(target_directory, processed_filename)
-    
-    try:
-        cv2.imwrite(processed_path, img_processed)
-    except Exception as e:
-        st.error(f"Could not save processed image {processed_path}: {e}. Using original from previous step.")
-        return image_path # Return original path if save failed
-
-    return processed_path
 
 # Generate the test cases
 # Now accepts local_image_paths to associate with results for PDF embedding
@@ -384,7 +356,7 @@ def create_pdf(results):
     p.save()
     buffer.seek(0)
     return buffer
-    
+
 # Function to create CSV of test cases
 def create_csv(results):
     data = []
@@ -441,18 +413,7 @@ def main():
             if docs:
                 st.success(f"{len(docs)} screenshot(s) selected and ready for processing.")
                 
-                st.subheader("🖼️ Image Preprocessing (Optional)")
-                preprocess_enabled = st.checkbox("Enable image preprocessing", key="main_preprocess_enabled", help="Adjust image properties before analysis.")
-                
-                brightness, contrast, grayscale = 0, 1.0, False
-                if preprocess_enabled:
-                    col_bright, col_contrast, col_gray = st.columns(3)
-                    with col_bright:
-                        brightness = st.slider("Brightness", -50, 50, 0, key="main_brightness")
-                    with col_contrast:
-                        contrast = st.slider("Contrast", 0.5, 2.0, 1.0, 0.1, key="main_contrast")
-                    with col_gray:
-                        grayscale = st.checkbox("Convert to Grayscale", key="main_grayscale")
+
                 
                 st.subheader("⚙️ Processing Options")
                 detailed_mode = st.checkbox("Generate detailed test cases", key="main_detailed_mode", help="Generates more comprehensive test cases, which may take longer.")
@@ -467,15 +428,8 @@ def main():
                             return # Exit button action
 
                         actual_paths_for_gemini = []
-                        if preprocess_enabled:
-                            st.write("Preprocessing images...")
-                            temp_processed_paths = []
-                            for path in saved_file_paths:
-                                processed_path = preprocess_image(path, brightness, contrast, grayscale)
-                                temp_processed_paths.append(processed_path)
-                            actual_paths_for_gemini = temp_processed_paths
-                        else:
-                            actual_paths_for_gemini = saved_file_paths
+
+                        actual_paths_for_gemini = saved_file_paths
                         
                         if not actual_paths_for_gemini:
                             st.error("No image files available after potential preprocessing. Aborting generation.")
@@ -487,19 +441,6 @@ def main():
                         if not gemini_uploaded_files:
                             st.error("No files were successfully uploaded to the AI model. Aborting generation.")
                             return
-                        
-                        # Important: Ensure `actual_paths_for_gemini` corresponds to `gemini_uploaded_files`.
-                        # If `upload_to_gemini` skips files, `actual_paths_for_gemini` needs to be filtered.
-                        # For simplicity now, assuming `describe` can handle potential index mismatches with its warning.
-                        # A more robust approach would be for `upload_to_gemini` to return a list of (genai_file, local_path) tuples.
-                        # Then `describe` would iterate over these pairs.
-                        # Current `describe` iterates over `gemini_uploaded_files` and uses its index `i` for `local_image_paths[i]`.
-                        # So, `local_image_paths` passed to `describe` should strictly be the paths that correspond to `gemini_uploaded_files`.
-                        # If `upload_to_gemini` can return fewer items than `actual_paths_for_gemini`, then `actual_paths_for_gemini`
-                        # needs to be filtered *before* passing to `describe` or `describe` needs to handle this.
-                        # Let's assume `actual_paths_for_gemini` passed to `describe` should be the list of paths
-                        # for which `upload_to_gemini` actually succeeded. This is not currently guaranteed if `upload_to_gemini` skips.
-                        # For now, the existing logic in `describe` has a warning for length mismatch.
 
                         st.write("Generating test cases with AI...")
                         st.session_state.last_results = describe(user_query, gemini_uploaded_files, actual_paths_for_gemini, detailed_mode) 
