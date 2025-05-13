@@ -21,7 +21,7 @@ load_dotenv()
 # Configure gemini model
 genai.configure(api_key=os.environ.get('GOOGLE_API_KEY'))
 model = genai.GenerativeModel(
-    model_name='models/gemini-1.5-pro-latest'
+    model_name='models/gemini-1.5-flash-latest'
 )
 
 # Define directories
